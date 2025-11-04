@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>XAU/USD Auto Trading Dashboard</title>
+  <style>
+    body {
+      font-family: 'Inter', Arial, sans-serif;
+      background-color: #0b0b0b;
+      color: #f1f1f1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    h1 {
+      color: gold;
+      margin-bottom: 10px;
+    }
+    #status {
+      margin-bottom: 10px;
+      font-size: 1.1em;
+    }
+    #controls {
+      margin: 15px 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+    }
+    input[type="number"] {
+      background: #111;
+      border: 1px solid #333;
+      color: gold;
+      padding: 6px;
+      border-radius: 6px;
+      width: 80px;
+      text-align: center;
+    }
+    button {
+      background: gold;
+      color: black;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    button:hover {
+      background: #ffcc00;
+    }
+    #performance {
+      margin-top: 15px;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 10px;
+      width: 90%;
+      max-width: 800px;
+      text-align: left;
+      font-size: 0.95em;
+      line-height: 1.6em;
+    }
+    #log {
+      width: 90%;
+      max-width: 800px;
+      height: 55vh;
+      overflow-y: auto;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 0.9em;
+    }
+    .buy { color: #00ff90; }
+    .sell { color: #ff4040; }
+    .warn { color: #ffcc00; }
+    .info { color: #a0a0a0; }
+  </style>
+</head>
+<body>
+  <h1>XAU/USD Auto Trading Dashboard</h1>
+  <div id="status">Connecting...</div>
+  <div id="session">Session: Unknown</div>
+
+  <div id="controls">
+    <label>Lot Size:</label>
+    <input type="number" id="lotSize" value="0.10" step="0.01" min="0.01" />
+    <button id="updateLot">Update</button>
+    <button id="resetStats">Reset Stats</button>
+  </div>
+
+  <div id="performance">
+    <b>Performance Tracker</b><br>
+    Total Trades: <span id="totalTrades">0</span><br>
+    Wins: <span id="wins">0</span> | Losses: <span id="losses">0</span><br>
+    Win Rate: <span id="winRate">0%</span><br>
+    Net Profit: <span id="netProfit">$0.00</span>
+  </div>
+
+  <div id="log"></div>
+
+  <script>
+    let ws;
+    const logBox = document.getElementById('log');
+    const statusBox = document.getElementById('status');
+    const sessionBox = document.getElementById('session');
+
+    const totalTradesEl = document.getElementById('totalTrades');
+    const winsEl = document.getElementById('wins');
+    const lossesEl = document.getElementById('losses');
+    const winRateEl = document.getElementById('winRate');
+    const netProfitEl = document.getElementById('netProfit');
+    const lotSizeInput = document.getElementById('lotSize');
+    const updateLotBtn = document.getElementById('updateLot');
+    const resetStatsBtn = document.getElementById('resetStats');
+
+    function appendLog(message, cls = 'info') {
+      const entry = document.createElement('div');
+      entry.className = cls;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      logBox.prepend(entry);
+    }
+
+    function updatePerformance(p) {
+      totalTradesEl.textContent = p.totalTrades;
+      winsEl.textContent = p.wins;
+      lossesEl.textContent = p.losses;
+      winRateEl.textContent = p.winRate.toFixed(1) + '%';
+      netProfitEl.textContent = '$' + p.netProfit.toFixed(2);
+    }
+
+    // WebSocket setup with reconnection
+    function connectWS() {
+      ws = new WebSocket('ws://localhost:8080');
+
+      ws.onopen = () => {
+        statusBox.textContent = '✅ Connected to Bot';
+        appendLog('Connected to WebSocket. Waiting for signals...');
+        ws.send(JSON.stringify({ type: 'lotSize', value: parseFloat(lotSizeInput.value) }));
+      };
+
+      ws.onclose = () => {
+        statusBox.textContent = '❌ Disconnected — retrying...';
+        appendLog('Lost connection. Retrying in 5s...', 'warn');
+        setTimeout(connectWS, 5000);
+      };
+
+      ws.onerror = (err) => {
+        appendLog('WebSocket Error: ' + err.message, 'warn');
+      };
+
+      ws.onmessage = (msg) => {
+        try {
+          const data = JSON.parse(msg.data);
+
+          switch (data.type) {
+            case 'signal':
+              appendLog(`${data.side.toUpperCase()} signal → ${data.price}`, data.side === 'buy' ? 'buy' : 'sell');
+              break;
+            case 'trade':
+              appendLog(`Executed ${data.side.toUpperCase()} trade at ${data.price}`, data.side === 'buy' ? 'buy' : 'sell');
+              break;
+            case 'performance':
+              updatePerformance(data.stats);
+              break;
+            case 'status':
+              appendLog(data.text, 'info');
+              break;
+            case 'error':
+              appendLog('Error: ' + data.text, 'warn');
+              break;
+            default:
+              appendLog('Unknown message: ' + msg.data, 'warn');
+          }
+        } catch (err) {
+          appendLog('Invalid message: ' + msg.data, 'warn');
+        }
+      };
+    }
+
+    connectWS();
+
+    // --- Controls ---
+    updateLotBtn.onclick = () => {
+      const value = parseFloat(lotSizeInput.value);
+      if (!isNaN(value) && value > 0) {
+        ws.send(JSON.stringify({ type: 'lotSize', value }));
+        appendLog(`Lot size updated to ${value}`, 'info');
+      }
+    };
+
+    resetStatsBtn.onclick = () => {
+      ws.send(JSON.stringify({ type: 'resetStats' }));
+      appendLog('Performance stats reset.', 'warn');
+      updatePerformance({ totalTrades: 0, wins: 0, losses: 0, winRate: 0, netProfit: 0 });
+    };
+
+    // --- Session Status ---
+    setInterval(() => {
+      const now = new Date();
+      const utcH = now.getUTCHours();
+      const utcM = now.getUTCMinutes();
+      const total = utcH * 60 + utcM;
+      const inSession = (total >= 7 * 60 && total <= 10 * 60) || (total >= 12 * 60 + 30 && total <= 15 * 60 + 30);
+      sessionBox.textContent = inSession ? 'Session: ACTIVE (London/NY)' : 'Session: Inactive';
+      sessionBox.style.color = inSession ? 'gold' : '#888';
+    }, 1000);
+  </script>
+</body>
+</html>
