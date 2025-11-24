@@ -46,6 +46,12 @@ startMT5Bridge();
 const app = express();
 app.use(express.static('public'));
 
+// Debug: log every HTTP request to diagnose tunnel/404
+app.use((req, res, next) => {
+  console.log(new Date().toISOString(), req.ip, req.method, req.url);
+  next();
+});
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
@@ -652,8 +658,8 @@ if (process.env.AUTO_START_DERIV === 'true') {
 }
 // load persisted stats and start server
 loadStats();
-server.listen(PORT, () => {
-  console.log(chalk.green(`🚀 Server running on port ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(chalk.green(`🚀 Server running on port ${PORT} (0.0.0.0)`));
 });
 
 // cleanup on exit
