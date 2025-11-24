@@ -136,7 +136,8 @@
 
     // WebSocket setup with reconnection
     function connectWS() {
-      ws = new WebSocket('ws://localhost:5000');
+      // connect back to the same host/protocol serving the page (supports ws/wss and tunnels)
+      ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host);
 
       ws.onopen = () => {
         statusBox.textContent = '✅ Connected to Bot';
