@@ -55,7 +55,7 @@ app.use((req, res, next) => {
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-const PORT = parseInt(process.env.PORT || '5000', 10);
+const PORT = parseInt(process.env.PORT || '8080', 10);
 const STATS_FILE = path.resolve(process.cwd(), 'data', 'stats.json'); // ensure directory exists
 const CANDLE_FETCH_RETRY_MS = 5000;
 const CANDLE_LIMIT = 200;
